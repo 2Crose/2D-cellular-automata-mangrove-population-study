@@ -1,0 +1,584 @@
+"""
+Hello!
+This is the main script of code for the linear mangrove simulation setup.
+I will add notes below for sections that have been changed since the last simulation.
+"""
+import pygame
+import random
+from collections import Counter
+
+pygame.init()
+
+GREY = (128,128,128)
+BLACK = (0, 0, 0)
+WHITE = (255, 255, 255)
+RED = (255, 0, 0)
+WATER = (0, 0, 225)
+YELLOW = (255, 255, 0)
+#Added the color brown so we can make dirt cells have their own positions
+BROWN = (150, 75, 0)
+
+WIDTH, HEIGHT = 800, 800
+TILE_SIZE = 10
+GRID_WIDTH = WIDTH // TILE_SIZE
+GRID_HEIGHT = HEIGHT // TILE_SIZE
+#Added a Max salinity level that can be modified
+#Will set the range of the map between 0 and max salinity level per row
+#each row of cells will have a floating point number as an associated salinity value
+Max_S_LEVEL = 35
+
+FPS = 60
+screen = pygame.display.set_mode((WIDTH, HEIGHT))
+
+clock = pygame.time.Clock()
+#This creates a list of all possible positions we will call later
+all_positions = {
+    (col, row)
+    for col in range(GRID_WIDTH)
+    for row in range(GRID_HEIGHT)
+}
+
+     
+def gen(num):
+    return set([(random.randrange(0, GRID_WIDTH), random.randrange(0, GRID_HEIGHT)) for _ in range(num)])
+"""
+Added the Brown_positions to list we need to call
+Also added a for loop for Brown_positions
+"""
+def draw_grid(RED_positions, BLACK_positions, WHITE_positions, YELLOW_positions, BROWN_positions):
+    for BROWN_position in BROWN_positions:
+        col, row = BROWN_position
+        top_left = (col * TILE_SIZE, row * TILE_SIZE)
+        pygame.draw.rect(screen, BROWN, (*top_left, TILE_SIZE, TILE_SIZE))
+    for RED_position in RED_positions:
+        col, row = RED_position
+        top_left = (col * TILE_SIZE, row * TILE_SIZE)
+        pygame.draw.rect(screen, RED, (*top_left, TILE_SIZE, TILE_SIZE))
+    for BLACK_position in BLACK_positions:
+        col, row = BLACK_position
+        top_left = (col * TILE_SIZE, row * TILE_SIZE)
+        pygame.draw.rect(screen, BLACK, (*top_left, TILE_SIZE, TILE_SIZE))
+    for WHITE_position in WHITE_positions:
+        col, row = WHITE_position
+        top_left = (col * TILE_SIZE, row * TILE_SIZE)
+        pygame.draw.rect(screen, WHITE, (*top_left, TILE_SIZE, TILE_SIZE))
+    for YELLOW_position in YELLOW_positions:
+        col, row = YELLOW_position
+        top_left = (col * TILE_SIZE, row * TILE_SIZE)
+        pygame.draw.rect(screen, YELLOW, (*top_left, TILE_SIZE, TILE_SIZE))
+    for row in range(GRID_HEIGHT):
+        pygame.draw.line(screen, GREY, (0, row * TILE_SIZE), (WIDTH, row * TILE_SIZE))
+
+    for col in range(GRID_WIDTH):
+        pygame.draw.line(screen, GREY, (col * TILE_SIZE, 0), (col * TILE_SIZE, HEIGHT))
+
+def adjust_grid(RED_positions, BLACK_positions, WHITE_positions, YELLOW_positions, BROWN_positions):
+    
+    """ 
+    madified what sets to create
+    added a ..._toadd set for all colors as well as sets for the Brown_positions
+    the _toadd sets will be used later so that cells are added and discared in one go
+    This will not allow empty cells to form out of the blue and will not allow for compounding effects of rules
+    """
+    new_YELLOW_positions = set()
+    new_YELLOW_positions_todiscard = set()
+    new_YELLOW_positions_toadd = set()
+    new_WHITE_positions = set()
+    new_WHITE_positions_todiscard = set()
+    new_WHITE_positions_toadd = set()
+    new_BLACK_positions = set()
+    new_BLACK_positions_todiscard = set()
+    new_BLACK_positions_toadd = set()
+    new_RED_positions = set()
+    new_RED_positions_todiscard = set()
+    new_RED_positions_toadd = set()
+    new_BROWN_positions = set()
+    new_BROWN_positions_todiscard = set()
+    new_BROWN_positions_toadd = set()
+
+    for BROWN_position in BROWN_positions:
+        new_BROWN_positions.add(BROWN_position)
+        
+    for RED_position in RED_positions:
+        new_RED_positions.add(RED_position)
+
+    for BLACK_position in BLACK_positions:
+        new_BLACK_positions.add(BLACK_position)
+        
+    for WHITE_position in WHITE_positions:
+        new_WHITE_positions.add(WHITE_position)
+
+    for YELLOW_position in YELLOW_positions:
+        new_YELLOW_positions.add(YELLOW_position)
+    #I will explain these loops for dirt postions later
+    #but since i made all positions dirt in the press key down g
+    #I add to include them up here for that first timestep
+    for color_set in (new_RED_positions, new_BLACK_positions, new_WHITE_positions, new_YELLOW_positions):
+        for pos in color_set:
+            new_BROWN_positions.discard(pos)
+    
+    forbidden = set(
+        new_RED_positions
+        | new_BLACK_positions
+        | new_WHITE_positions
+        | new_YELLOW_positions
+    )
+
+    new_BROWN_positions = all_positions - forbidden
+    for BROWN_position in new_BROWN_positions:
+        BROWN_salinity = get_cell_salinity(BROWN_position)    
+        if not (0 <= BROWN_salinity < 34):
+            new_BROWN_positions_todiscard.add(BROWN_position)
+            
+    for BROWN_position in new_BROWN_positions_todiscard:
+        new_BROWN_positions.discard(BROWN_position)
+
+#----- RED
+    """
+    Adds this for loop for salinity
+    positions that are in the range below will be kept while others will be discarded
+    """
+    for RED_position in new_RED_positions:
+        RED_salinity = get_cell_salinity(RED_position)
+        #The range in this line can be changed to fit the salinity range of the species
+        #The range must be between 0 and the max salinity value described above
+        if not (20 <= RED_salinity < 34):
+            new_RED_positions_todiscard.add(RED_position)
+            new_BROWN_positions.add(RED_position)
+    # This for loop discards those positions that were not in the loop                    
+    for RED_position in new_RED_positions_todiscard:
+        new_RED_positions.discard(RED_position)
+    #Adds to the _toadd or _todiscard sets instead of running the operator right away
+    #HAs to be done to not intifer with the for loop positions while running
+    for RED_position in new_RED_positions:
+        RED_neighbors = get_neighbors(RED_position)
+        RED_neighbors = list(filter(lambda x: x in new_RED_positions, RED_neighbors))
+        if len(RED_neighbors) in [1,2,3]:
+            new_RED_positions_toadd.add(RED_position)
+            
+        else:
+            new_RED_positions_todiscard.add(RED_position)
+            
+    #These next two for loops add or remove those positons
+    for RED_position in new_RED_positions_toadd:
+        new_RED_positions.add(RED_position)
+            
+    for RED_position in new_RED_positions_todiscard:
+        new_RED_positions.discard(RED_position)
+    #The red cells can no longer spread to water cells
+    #Now they can only spread to dirt, Brown, cells like all other species
+    for BROWN_position in new_BROWN_positions:
+        BROWN_neighbors = get_neighbors(BROWN_position)
+        BROWN_neighbors = list(filter(lambda x: x in new_RED_positions, BROWN_neighbors))
+        #list below in the brackets can be changed to how many red neighbors will turn a brown cell red
+        if len(BROWN_neighbors) in [1, 2]:
+            new_RED_positions_toadd.add(BROWN_position)
+            
+    #The next two for loops remove and add the positions        
+    for RED_position in new_RED_positions_toadd:
+        new_RED_positions.add(RED_position)
+        
+    for BROWN_position in new_BROWN_positions_todiscard:
+        new_BROWN_positions.discard(BROWN_position)
+    #This for loop is the same as before but added the add brown positions line to fill in empty cells    
+    for RED_position in new_RED_positions:
+        if random.randint(1, 150) == 1:   
+            new_RED_positions_todiscard.add(RED_position)
+            new_BROWN_positions.add(RED_position)
+            
+    for RED_position in new_RED_positions_todiscard:
+        new_RED_positions.discard(RED_position)
+    """
+    These changes for the red positions are the same for the other species
+    The only key difference is that the other species can consume a different species
+    These for loops are placed in a specific order so that the positions get added or discarded after the rules
+    """
+#----- BLACK
+        
+    for BLACK_position in new_BLACK_positions:
+        BLACK_salinity = get_cell_salinity(BLACK_position)
+
+        if not (10 <= BLACK_salinity < 25):
+            new_BLACK_positions_todiscard.add(BLACK_position)
+            
+    for BLACK_position in new_BLACK_positions_todiscard:
+        new_BLACK_positions.discard(BLACK_position)
+        
+    for BLACK_position in new_BLACK_positions:
+        BLACK_neighbors = get_neighbors(BLACK_position)
+        BLACK_neighbors = list(filter(lambda x: x in new_BLACK_positions, BLACK_neighbors))
+        if len(BLACK_neighbors) in [1,2,3]:
+            new_BLACK_positions.add(BLACK_position)
+        else:
+            new_BLACK_positions_todiscard.add(BLACK_position)
+            
+    for BLACK_position in new_BLACK_positions_todiscard:
+        new_BLACK_positions.discard(BLACK_position)
+    #These are the two for loops I alluded to above
+    #The resulting list aditions do not effect what is in the same for loop or the one after
+    #This effectivly means that these two for loops run at the same time
+    for RED_position in new_RED_positions:
+        RED_neighbors = get_neighbors(RED_position)
+        RED_neighbors = list(filter(lambda x: x in new_BLACK_positions, RED_neighbors))
+
+        if len(RED_neighbors) in [3,4]:
+            new_BLACK_positions_toadd.add(RED_position)
+            new_RED_positions_todiscard.add(RED_position)
+    
+    for BROWN_position in new_BROWN_positions:
+        BROWN_neighbors = get_neighbors(BROWN_position)
+        BROWN_neighbors = list(filter(lambda x: x in new_BLACK_positions, BROWN_neighbors))
+
+        if len(BROWN_neighbors) in [1, 2]:
+            new_BLACK_positions_toadd.add(BROWN_position)
+    
+    for RED_position in new_RED_positions_todiscard:
+        new_RED_positions.discard(RED_position)
+        
+    for BLACK_position in new_BLACK_positions_toadd:
+        new_BLACK_positions.add(BLACK_position)
+
+    for BLACK_position in new_BLACK_positions:
+        if random.randint(1, 100) == 1:   
+            new_BLACK_positions_todiscard.add(BLACK_position)
+            
+    for BLACK_position in new_BLACK_positions_todiscard:
+        new_BLACK_positions.discard(BLACK_position)
+
+#----- WHITE
+
+    for WHITE_position in new_WHITE_positions:
+        WHITE_salinity = get_cell_salinity(WHITE_position)
+
+        if not (0 <= WHITE_salinity < 15):
+            new_WHITE_positions_todiscard.add(WHITE_position)
+
+    for WHITE_position in new_WHITE_positions_todiscard:
+        new_WHITE_positions.discard(WHITE_position)
+    
+    for WHITE_position in new_WHITE_positions:
+        WHITE_neighbors = get_neighbors(WHITE_position)
+        WHITE_neighbors = list(filter(lambda x: x in new_WHITE_positions, WHITE_neighbors))
+        if len(WHITE_neighbors) in [1,2,3]:
+            new_WHITE_positions.add(WHITE_position)
+        else:
+            new_WHITE_positions_todiscard.add(WHITE_position)
+
+    for WHITE_position in new_WHITE_positions_todiscard:
+        new_WHITE_positions.discard(WHITE_position)
+    
+    for BLACK_position in new_BLACK_positions:
+        BLACK_neighbors = get_neighbors(BLACK_position)
+        BLACK_neighbors = list(filter(lambda x: x in new_WHITE_positions, BLACK_neighbors))
+        if len(BLACK_neighbors) in [3,4]:
+            new_WHITE_positions_toadd.add(BLACK_position)
+            new_BLACK_positions_todiscard.add(BLACK_position)
+           
+    for BROWN_position in new_BROWN_positions:
+        BROWN_neighbors = get_neighbors(BROWN_position)
+        BROWN_neighbors = list(filter(lambda x: x in new_WHITE_positions, BROWN_neighbors))
+        if len(BROWN_neighbors) in [1, 2]:
+            new_WHITE_positions_toadd.add(BROWN_position)
+
+    for BLACK_position in new_BLACK_positions_todiscard:
+        new_BLACK_positions.discard(BLACK_position)
+
+    for WHITE_position in new_WHITE_positions_toadd:
+        new_WHITE_positions.add(WHITE_position)
+     
+    for WHITE_position in new_WHITE_positions:
+        if random.randint(1, 100) == 1:   
+            new_WHITE_positions_todiscard.add(WHITE_position)
+         
+    for WHITE_position in new_WHITE_positions_todiscard:
+        new_WHITE_positions.discard(WHITE_position)
+
+#----- YELLOW
+
+    for YELLOW_position in new_YELLOW_positions:
+        YELLOW_salinity = get_cell_salinity(YELLOW_position)
+
+        if not (0 <= YELLOW_salinity < 30):
+            new_YELLOW_positions_todiscard.add(YELLOW_position)
+            
+    for YELLOW_position in new_YELLOW_positions_todiscard:
+        new_YELLOW_positions.discard(YELLOW_position)
+        
+    for YELLOW_position in new_YELLOW_positions:
+        YELLOW_neighbors = get_neighbors(YELLOW_position)
+        YELLOW_neighbors = list(filter(lambda x: x in new_YELLOW_positions, YELLOW_neighbors))
+
+        if len(YELLOW_neighbors) in [1,2]:
+            new_YELLOW_positions.add(YELLOW_position)
+        else:
+            new_YELLOW_positions_todiscard.add(YELLOW_position)
+
+    for YELLOW_position in new_YELLOW_positions_todiscard:
+        new_YELLOW_positions.discard(YELLOW_position)
+    #I made it so that this invasive species can outcompete all other species in its salinity range
+    #The rule numbers can be changed
+    #The species that are effected can also be changed by removing them in quoteation marks so the comupter doesnt read those lines
+    for WHITE_position in new_WHITE_positions:
+        WHITE_neighbors = get_neighbors(WHITE_position)
+        WHITE_neighbors = list(filter(lambda x: x in new_YELLOW_positions, WHITE_neighbors))
+        if len(WHITE_neighbors) in [2, 3, 4]:
+            new_YELLOW_positions_toadd.add(WHITE_position)
+            new_WHITE_positions_todiscard.add(WHITE_position)
+
+    for BLACK_position in new_BLACK_positions:
+        BLACK_neighbors = get_neighbors(BLACK_position)
+        BLACK_neighbors = list(filter(lambda x: x in new_YELLOW_positions, BLACK_neighbors))
+        if len(BLACK_neighbors) in [2, 3, 4]:
+            new_YELLOW_positions_toadd.add(BLACK_position)
+            new_BLACK_positions_todiscard.add(BLACK_position)
+
+    for RED_position in new_RED_positions:
+        RED_neighbors = get_neighbors(RED_position)
+        
+        RED_neighbors = list(filter(lambda x: x in new_YELLOW_positions, RED_neighbors))
+
+        if len(RED_neighbors) in [2, 3, 4]:
+            new_YELLOW_positions_toadd.add(RED_position)
+            new_RED_positions_todiscard.add(RED_position)
+    
+    for BROWN_position in new_BROWN_positions:
+        BROWN_neighbors = get_neighbors(BROWN_position)
+        BROWN_neighbors = list(filter(lambda x: x in new_YELLOW_positions, BROWN_neighbors))
+
+        if len(BROWN_neighbors) in [1, 2, 3]:
+            new_YELLOW_positions_toadd.add(BROWN_position)
+
+    for YELLOW_position in new_YELLOW_positions_toadd:
+        new_YELLOW_positions.add(YELLOW_position)
+
+    for WHITE_position in new_WHITE_positions_todiscard:
+        new_WHITE_positions.discard(WHITE_position)
+
+    for BLACK_position in new_BLACK_positions_todiscard:
+        new_BLACK_positions.discard(BLACK_position)
+
+    for RED_position in new_RED_positions_todiscard:
+        new_RED_positions.discard(RED_position)
+        
+    for YELLOW_position in new_YELLOW_positions:
+        if random.randint(1, 50) == 1:   
+            new_YELLOW_positions_todiscard.add(YELLOW_position)
+
+    for YELLOW_position in new_YELLOW_positions_todiscard:
+        new_YELLOW_positions.discard(YELLOW_position)
+#----
+    """
+    This whole section is new
+    this first for loop is to fill in any empty cells in the simulation with dirt cells
+    it first discards any brown positions that may have accidentially been placed under a different cell
+    """
+    for color_set in (new_RED_positions, new_BLACK_positions, new_WHITE_positions, new_YELLOW_positions):
+        for pos in color_set:
+            new_BROWN_positions.discard(pos)
+    #creates a set of all positions that are already a color        
+    forbidden = set(
+        new_RED_positions
+        | new_BLACK_positions
+        | new_WHITE_positions
+        | new_YELLOW_positions
+    )
+    #Makes sure that all positions in the simulation that are not color cells are dirt cells
+    new_BROWN_positions = all_positions - forbidden
+    #This is the salinity range of brown
+    #Set to be the minimum salinity of the lowest range species and the max of the most range species
+    #This will discard cells where we want no cells to be, ie. water (empty)
+    for BROWN_position in new_BROWN_positions:
+        BROWN_salinity = get_cell_salinity(BROWN_position)    
+        if not (0 <= BROWN_salinity < 34):
+            new_BROWN_positions_todiscard.add(BROWN_position)
+            
+    for BROWN_position in new_BROWN_positions_todiscard:
+        new_BROWN_positions.discard(BROWN_position)
+    #returns the new brown positions along with the other colors       
+    return new_RED_positions, new_BLACK_positions, new_WHITE_positions, new_YELLOW_positions, new_BROWN_positions
+
+def get_neighbors(pos):
+    x, y = pos
+    neighbors = []
+    for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
+        nx, ny = x + dx, y + dy
+        if abs(dx) + abs(dy) != 1:
+          continue
+        if 0 <= nx < GRID_WIDTH and 0 <= ny < GRID_HEIGHT:
+            neighbors.append((nx, ny))
+    return neighbors
+"""
+This equation decribes how to get the salinity of a cell
+used above to determine if cell will live or die
+only uses the row that the cell is on because the simulation has been segmented that way
+"""
+def get_cell_salinity(pos):
+    col, row = pos
+    raw = (row * Max_S_LEVEL) / (GRID_HEIGHT - 1)
+    raw = round(raw, 2)
+    return max(0, min(Max_S_LEVEL, raw))
+"""
+grid_values = [
+    [get_cell_salinity((col, row))
+    for col in range(GRID_WIDTH)]
+    for row in range(GRID_HEIGHT)]
+print(grid_values)
+"""
+            
+def main():
+    running = True
+    playing = False
+    clock = pygame.time.Clock()
+    FPS = 60
+    count = 0
+    update_freq = 10
+    YELLOW_positions = set()
+    WHITE_positions = set()
+    BLACK_positions = set()
+    RED_positions = set()
+    #Added a brown positions set
+    BROWN_positions = set()
+    #Added an inital timestep for a timestep counter
+    timestep = 0
+    while running:
+        clock.tick(FPS)
+        if playing:
+            count += 1
+        if count >= update_freq:
+            count = 0
+            #Added this timeset counter
+            timestep += 1
+            #Added the brown positions
+            RED_positions, BLACK_positions, WHITE_positions, YELLOW_positions, BROWN_positions = adjust_grid(RED_positions, BLACK_positions, WHITE_positions, YELLOW_positions, BROWN_positions)
+        if playing:
+            status = "Playing"
+        else:
+            status = "Paused"
+        #This is where the timestep will show up on the pygame window
+        caption = (f"{status}  RED = {len(RED_positions)}  BLACK = {len(BLACK_positions)}  WHITE = {len(WHITE_positions)}  YELLOW = {len(YELLOW_positions)}  BROWN = {len(BROWN_positions)} Timestep = {timestep}")
+
+        pygame.display.set_caption(caption)
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                running = False
+            #This whole if sequence decribes what each button press on the mouse does
+            #left places red, middle places black, and right places black 
+            if event.type == pygame.MOUSEBUTTONDOWN:
+                if event.button == 1:
+                    x, y = pygame.mouse.get_pos()
+                    col = x // TILE_SIZE
+                    row = y // TILE_SIZE
+                    pos = (col, row)
+                
+                    if pos in RED_positions:
+                        RED_positions.remove(pos)
+                    if pos in BLACK_positions:
+                        BLACK_positions.remove(pos)
+                    if pos in WHITE_positions:
+                        WHITE_positions.remove(pos)
+                    if pos in YELLOW_positions:
+                        YELLOW_positions.remove(pos)
+                    else:
+                        RED_positions.add(pos)
+                if event.button == 3:
+                    x, y = pygame.mouse.get_pos()
+                    col = x // TILE_SIZE
+                    row = y // TILE_SIZE
+                    pos = (col, row)
+                
+                    if pos in RED_positions:
+                        RED_positions.remove(pos)
+                    if pos in BLACK_positions:
+                        BLACK_positions.remove(pos)
+                    if pos in WHITE_positions:
+                        WHITE_positions.remove(pos)
+                    if pos in YELLOW_positions:
+                        YELLOW_positions.remove(pos)
+                    else:
+                        BLACK_positions.add(pos)
+                if event.button == 2:
+                    x, y = pygame.mouse.get_pos()
+                    col = x // TILE_SIZE
+                    row = y // TILE_SIZE
+                    pos = (col, row)
+                
+                    if pos in RED_positions:
+                        RED_positions.remove(pos)
+                    if pos in BLACK_positions:
+                        BLACK_positions.remove(pos)
+                    if pos in WHITE_positions:
+                        WHITE_positions.remove(pos)
+                    if pos in YELLOW_positions:
+                        YELLOW_positions.remove(pos)
+                    else:
+                        WHITE_positions.add(pos)
+
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_SPACE:
+                    playing = not playing
+
+                if event.key == pygame.K_c:
+                    YELLOW_positions = set()
+                    WHITE_positions = set()
+                    BLACK_positions = set()
+                    RED_positions = set()
+                    #Added the brown positions set here
+                    BROWN_positions = set()
+                    playing = False
+                    count = 0
+                    timestep = 0
+
+                if event.key == pygame.K_g:
+                    YELLOW_positions.clear()
+                    WHITE_positions.clear()
+                    BLACK_positions.clear()
+                    RED_positions.clear()
+                    BROWN_positions.clear()
+                    #This sets the brown positions to cover the entire map
+                    BROWN_positions = {
+                        (col, row)
+                        for col in range(GRID_WIDTH)
+                        for row in range(GRID_HEIGHT)}
+                    timestep = 0
+                    #You can remove species you dont want to randomly spawn by adding a # infront of the line
+                    #The two numbers can also be changed to change the number of cells spawned
+                    RED_positions = gen(random.randrange(4, 10) * GRID_WIDTH)
+                    
+                    BLACK_positions = gen(random.randrange(4, 10) * GRID_WIDTH)
+                    
+                    WHITE_positions = gen(random.randrange(4, 10) * GRID_WIDTH)
+                    
+                    #YELLOW_positions = gen(random.randrange(4, 10) * GRID_WIDTH)
+                #Adds the hurricane event!
+                #This ones fun but simple
+                #Removes half of all cells, including brown cells, so there are some empty spots but kinds looks like hurricane surge so I like it
+                if event.key == pygame.K_h:
+                    half_YELLOW_size = len(YELLOW_positions) // 2
+                    YELLOW_positions = set(random.sample(list(YELLOW_positions), half_YELLOW_size))
+                    half_BLACK_size = len(BLACK_positions) // 2
+                    BLACK_positions = set(random.sample(list(BLACK_positions), half_BLACK_size))
+                    half_WHITE_size = len(WHITE_positions) // 2
+                    WHITE_positions = set(random.sample(list(WHITE_positions), half_WHITE_size))
+                    half_RED_size = len(RED_positions) // 2
+                    RED_positions = set(random.sample(list(RED_positions), half_RED_size))
+                    half_BROWN_size = len(BROWN_positions) // 2
+                    BROWN_positions = set(random.sample(list(BROWN_positions), half_BROWN_size))
+
+
+                    
+
+        screen.fill(WATER)
+        draw_grid(RED_positions, BLACK_positions, WHITE_positions, YELLOW_positions, BROWN_positions)
+        pygame.display.update()
+
+
+    pygame.quit()
+
+if __name__ == "__main__":
+    main()
+"""
+And that it for this update
+personally like this simulation much more than the previous
+have fun experimenting!
+"""
