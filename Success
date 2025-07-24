@@ -1,0 +1,338 @@
+"""
+Hello World! I'm Calvin and I'm proud to present my 2D cellular automata for Mangrove population dynamics.
+I initally started with Conway's game of life, a similar 2D cellular automata
+As a result, it is not the most optimized code, but none the less I've change the code to accomadate the new rules for mangrove populations.
+Through the couse of this code I'll include pelenty of notes to explain the decisions i've made along the way.
+This will make it a little messy but bear with me.
+To start, import pygame and random. The pygame library is the basis for this code.
+It will allow us to actually show the code that we make along with captions
+(Each note will also be above the section being discussed)
+"""
+import pygame
+import random
+from collections import Counter
+# This initilizes the program
+pygame.init()
+# This defines the color we need to show from the pygame window
+# These are in rgb values so grey is a mixture of all of them while others like RED are just red
+# SImple but also important to define the colors with the same lettering since well be calling these values later
+GREY = (128,128,128)
+BLACK = (0, 0, 0)
+WHITE = (255, 255, 255)
+RED = (255, 0, 0)
+BLUE = (0, 0, 225)
+YELLOW = (255, 255, 0)
+# This chooses the size of the simulation window
+# Feel free to increase or decrease before running to change size, this is the value to change for that purpose
+# I believe that this is also measured in pixles so 800 by 800 in this case
+WIDTH, HEIGHT = 800, 800
+# The tile size for this case is 10 pixels
+# The next 2 codes are used to dictate the size of each cell, these shouldnt be changed
+#IMPORTANT! if you wish to change the tile size please choose a whole integer that is divisible by the width and height to get square cells
+# The FPS can also be fixed but I just keep it as 60
+TILE_SIZE = 10
+GRID_WIDTH = WIDTH // TILE_SIZE
+GRID_HEIGHT = HEIGHT // TILE_SIZE
+FPS = 60
+# This simply sets up the window that will pop up after running the program
+screen = pygame.display.set_mode((WIDTH, HEIGHT))
+# This is the code for the game clock. Will not show up as part of the caption on screen but is crucial for the game to know when to progress timesteps
+clock = pygame.time.Clock()
+"""
+This is the first definition of this program. This defines the generate random cell populations function when we call the program to populate the field
+I'll mention this later in the if event.key == pygame.K_g section but this is what that code is using.
+Conway's game of life, the code I've modeled this off of, set the random range as between  0 and either the GRID_WIDTH or GRID_HEIHGHT
+I've found this is really the only way to do it after checking online resources. At least for this specific definintion.
+If you want to change the amount of cells that spawn then changeing the if event.key == pygame.K_g section is best
+"""
+def gen(num):
+    return set([(random.randrange(0, GRID_WIDTH), random.randrange(0, GRID_HEIGHT)) for _ in range(num)])
+"""
+This is the draw_grid function. It takes the RED/BLACK/WHITE/YELLOW postions and colors them
+The RED_positons are the postions of those RED cells. The RED_positon is the specific position of one of those cells. This function loops through each of the positions for each for loop.
+The position is then translated to a usable positon and drawn by making the size of each tile and coloring it the approprate color
+All 4 colors do the same thing
+The end is slightly different because it defines the outlines of the grids
+The colors can be changed but other than that I dont really touch it
+"""
+def draw_grid(RED_positions, BLACK_positions, WHITE_positions, YELLOW_positions):
+    for RED_position in RED_positions:
+        col, row = RED_position
+        top_left = (col * TILE_SIZE, row * TILE_SIZE)
+        pygame.draw.rect(screen, RED, (*top_left, TILE_SIZE, TILE_SIZE))
+    for BLACK_position in BLACK_positions:
+        col, row = BLACK_position
+        top_left = (col * TILE_SIZE, row * TILE_SIZE)
+        pygame.draw.rect(screen, BLACK, (*top_left, TILE_SIZE, TILE_SIZE))
+    for WHITE_position in WHITE_positions:
+        col, row = WHITE_position
+        top_left = (col * TILE_SIZE, row * TILE_SIZE)
+        pygame.draw.rect(screen, WHITE, (*top_left, TILE_SIZE, TILE_SIZE))
+    for YELLOW_position in YELLOW_positions:
+        col, row = YELLOW_position
+        top_left = (col * TILE_SIZE, row * TILE_SIZE)
+        pygame.draw.rect(screen, YELLOW, (*top_left, TILE_SIZE, TILE_SIZE))
+    for row in range(GRID_HEIGHT):
+        pygame.draw.line(screen, GREY, (0, row * TILE_SIZE), (WIDTH, row * TILE_SIZE))
+
+    for col in range(GRID_WIDTH):
+        pygame.draw.line(screen, GREY, (col * TILE_SIZE, 0), (col * TILE_SIZE, HEIGHT))
+"""
+This is the big one
+This defines the function adjust_grid
+I have these sets up here for the positions we need to store
+"""
+def adjust_grid(RED_positions, BLACK_positions, WHITE_positions, YELLOW_positions):
+
+    new_YELLOW_positions = set()
+    new_YELLOW_positions_todiscard = set()
+    new_WHITE_positions = set()
+    new_WHITE_positions_todiscard = set()
+    new_BLACK_positions = set()
+    new_BLACK_positions_todiscard = set()
+    all_RED_neighbors = set()
+    new_RED_positions = set()
+    new_RED_positions_todiscard = set()
+    # Just like above this calls the red positions we need
+    # The next line is getting the neighbors of a specific position and this for loop cycles through all the positions
+    for RED_position in RED_positions:
+        RED_neighbors = get_neighbors(RED_position)
+        RED_neighbors = list(filter(lambda x: x in RED_positions, RED_neighbors))
+        # This if function is determining the length of the red_neighbors and if theyre 1, 2, or 3 RED_positions neighboring that central position then the red cell keeps its position
+        # The numbers here can be changed to fit the rules of the game
+        # For this simulation I made the RED cells only keep their current position if there were 1, 2, or 3 other red cells as neighbors
+        # This way they die if they dont have any support from neighbors (0) and die if they are too crowded (4)
+        if len(RED_neighbors) in [1, 2, 3]:
+            new_RED_positions.add(RED_position)
+    # This for loop gathers the neighbors of the new_RED_positions
+    # The neighbors will be used later to make new cells
+    for RED_position in new_RED_positions:
+        RED_neighbors = get_neighbors(RED_position)
+        all_RED_neighbors.update(RED_neighbors)
+    # This for loop uses the neighbors we just gathered then takes the positons of those cells
+    # It then finds the neighbors of those new positions
+    for RED_position in all_RED_neighbors:
+        RED_neighbors = get_neighbors(RED_position)
+        RED_neighbors = list(filter(lambda x: x in new_RED_positions, RED_neighbors))
+        #This section says if those empty water cells are neighboring either 1 or 2 new_RED_positions then a new cell will be made
+        #These numbers can also be changed to fit the rules of new cell creation
+        if len(RED_neighbors) in [1, 2]:
+            new_RED_positions.add(RED_position)
+    #This block is for how long the trees live unimpeded
+    #A random number generator chooses a number between 1 and 150
+    #IF it is a one, the tree does. On average the black tree will die after 150 years
+    #This simulates the lifespan of trees
+    #To modify for different species simply change the second larger number to the accepted lifespan
+    for RED_position in new_RED_positions:
+        if random.randint(1, 150) == 1:   
+            new_RED_positions_todiscard.add(RED_position)
+    #This code discards the red positons that just died
+    #We need to do this seperate from the other loops because we cant change the intial sets mid loop
+    #So we need to note the positions to discard then discard those from the set we actually want
+    for RED_position in new_RED_positions_todiscard:
+        new_RED_positions.discard(RED_position)
+"""
+This little # and -s are just to break up the colors and their rules
+Beacuse a lot of the code below is just the above code but for different colors I wont make too many comments
+"""
+#-----
+    #This does the same as the one above
+    #Changed the numbers to refect that Black mangroves need more neighbors to live
+    for BLACK_position in BLACK_positions:
+        BLACK_neighbors = get_neighbors(BLACK_position)        
+        BLACK_neighbors = list(filter(lambda x: x in BLACK_positions, BLACK_neighbors))
+        if len(BLACK_neighbors) in [2,3]:
+            new_BLACK_positions.add(BLACK_position)
+    #This is a new code because the black mangroves can only take over red mangroves
+    #Starts out similar in the first two lines to ger the neighbors
+    for RED_position in new_RED_positions:
+        RED_neighbors = get_neighbors(RED_position)
+        #This line lists all the neighbors of a red positon that are black
+        RED_neighbors = list(filter(lambda x: x in new_BLACK_positions, RED_neighbors))
+        #If there are 1 or 2 black neighbors neighboring a red cell then it turns black itself (ie black eats red)
+        #Then in the next two lines we add to the new_BLACK_postions and add to the list of RED positons to discard
+        if len(RED_neighbors) in [1, 2]:
+            new_BLACK_positions.add(RED_position)
+            new_RED_positions_todiscard.add(RED_position)            
+    #This code actually discards those positions to discard like before        
+    for RED_position in new_RED_positions_todiscard:
+        new_RED_positions.discard(RED_position)
+    #This is the lifespan of a black mangrove, about 100 years
+    for BLACK_position in new_BLACK_positions:
+        if random.randint(1, 100) == 1:   
+            new_BLACK_positions_todiscard.add(BLACK_position)        
+    #This code discards the black positons that just died      
+    for BLACK_position in new_BLACK_positions_todiscard:
+        new_BLACK_positions.discard(BLACK_position)
+#-----
+    for WHITE_position in WHITE_positions:
+        WHITE_neighbors = get_neighbors(WHITE_position)
+        WHITE_neighbors = list(filter(lambda x: x in WHITE_positions, WHITE_neighbors))
+        #I chose 3 for the white mangroves because they are even more susceptible to salinity and thus need more neighbors
+        #3 does cause them to not spread too much however
+        if len(WHITE_neighbors) in [3]:
+            new_WHITE_positions.add(WHITE_position)
+
+    for BLACK_position in new_BLACK_positions:
+        BLACK_neighbors = get_neighbors(BLACK_position)
+        BLACK_neighbors = list(filter(lambda x: x in new_WHITE_positions, BLACK_neighbors))
+        #I kept the same growth rules so that they keep the same growth pace as the black mangroves
+        if len(BLACK_neighbors) in [1,2]:
+            new_WHITE_positions.add(BLACK_position)
+            new_BLACK_positions_todiscard.add(BLACK_position)
+
+    for BLACK_position in new_BLACK_positions_todiscard:
+        new_BLACK_positions.discard(BLACK_position)
+    #They also have the same timespan as black mangroves    
+    for WHITE_position in new_WHITE_positions:
+        if random.randint(1, 100) == 1:   
+            new_WHITE_positions_todiscard.add(WHITE_position)
+            
+    for WHITE_position in new_WHITE_positions_todiscard:
+        new_WHITE_positions.discard(WHITE_position)
+#-----             
+    for YELLOW_position in YELLOW_positions:
+        YELLOW_neighbors = get_neighbors(YELLOW_position)
+        YELLOW_neighbors = list(filter(lambda x: x in YELLOW_positions, YELLOW_neighbors))
+        #Yellow mangroves represent brazillian peppertrees (BP) and have a low shade tolerance
+        #as such they need less neighbors
+        if len(YELLOW_neighbors) in [1,2]:
+            new_YELLOW_positions.add(YELLOW_position)
+    #This for loop only describes BP taking over white mangroves but they have been proven to take over other mangroves aswell
+    #Unfortuneatly to make this chang you would have to add code but if i'll add a file if I've made this change
+    #The growth rule also includes a large range of numbers because BP is exceptional at taking over other cells
+    for WHITE_position in new_WHITE_positions:
+        WHITE_neighbors = get_neighbors(WHITE_position)
+        WHITE_neighbors = list(filter(lambda x: x in new_YELLOW_positions, WHITE_neighbors))
+        if len(WHITE_neighbors) in [1, 2, 3, 4]:
+            new_YELLOW_positions.add(WHITE_position)
+            new_WHITE_positions_todiscard.add(WHITE_position)
+
+    for WHITE_position in new_WHITE_positions_todiscard:
+        new_WHITE_positions.discard(WHITE_position)
+    #The lifespan for a BP is also shorter than other trees so this is represented here   
+    for YELLOW_position in new_YELLOW_positions:
+        if random.randint(1, 50) == 1:   
+            new_YELLOW_positions_todiscard.add(YELLOW_position)
+            
+    for YELLOW_position in new_YELLOW_positions_todiscard:
+        new_YELLOW_positions.discard(YELLOW_position)
+    #This is the end of the function and returns the new positions we have added to the sets with the above code
+    #Important! The return statement end the entire loop so this return has to stay at the end of the code or else some of the positons will be missed
+    #The order of the code is also vital, I layed out the survival and growth from red to black to white to yellow because they eat each other in the opposite order
+    #If you decide to add code then make sure the order is correct aswell because this will effect the rules of the game and throw off results
+    return new_RED_positions, new_BLACK_positions, new_WHITE_positions, new_YELLOW_positions
+
+def get_neighbors(pos):
+    x, y = pos
+    neighbors = []
+    for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
+        nx, ny = x + dx, y + dy
+        if abs(dx) + abs(dy) != 1:
+          continue
+        if 0 <= nx < GRID_WIDTH and 0 <= ny < GRID_HEIGHT:
+            neighbors.append((nx, ny))
+    return neighbors
+"""
+This is the definition of the main function
+the main function calls the other functions above
+"""
+def main():
+    #running and playing are pretty self evident
+    #need to define these to tell the computer when to start and stop
+    running = True
+    playing = False
+    #initilizes the clock so the computer can count to the next timestep
+    clock = pygame.time.Clock()
+    #The FPS can be changed. Locks the max frames per second of the simulation. I dont change this too much
+    FPS = 60
+    #Count is the inital count of the simulation. Basicly what timestep or fraction of a time step the sim starts on. Dont change
+    count = 0
+    #The update frequency can be changed. It defines the time in 60th of a second that the simulation updates. So for this case it updates every 6th of a second. A update_frequency of 60 would be i second
+    update_freq = 10
+    #These lists need to be here to create a set of the returned positions
+    YELLOW_positions = set()
+    WHITE_positions = set()
+    BLACK_positions = set()
+    RED_positions = set()
+    while running:
+        #updates the internal clock of the game based on fps
+        clock.tick(FPS)
+        if playing:
+            #Since the fps is 60 then the count will go up by 60 every sec
+            count += 1
+            #This says that when the count reaches 60 the positons will update and the count will reset
+        if count >= update_freq:
+            count = 0
+            #This is the main call in the fain function
+            #Calls on the old positions to run through the adjust_grid function and then return the new positions
+            #This is why the set up on the adjust_grid function is so important
+            RED_positions, BLACK_positions, WHITE_positions, YELLOW_positions = adjust_grid(RED_positions, BLACK_positions, WHITE_positions, YELLOW_positions)
+        #This is for the caption of the game
+        #If the sim is playing it will say playing and if not then it will say paused
+        if playing:
+            status = "Playing"
+        else:
+            status = "Paused"
+        #This describes the actual caption
+        #Will write on tip of window the status as well as the number of positions for each color
+        caption = (f"{status}  RED = {len(RED_positions)}  BLACK = {len(BLACK_positions)}  WHITE = {len(WHITE_positions)}  YELLOW = {len(YELLOW_positions)}")
+        #allows pygame to actually run the caption
+        pygame.display.set_caption(caption)
+        #This for loop is for keyboard inputs
+        for event in pygame.event.get():
+            #This jsut says to close the program when you quit it. Dont remove!
+            if event.type == pygame.QUIT:
+                running = False
+            #For ANY mouse botton clicked will create a position for that color
+            #Can costomize this section to fit what mouse biutton does what but for now I have any mouse button makes a white cell
+            #The color can easily change if you only replace the color name below
+            if event.type == pygame.MOUSEBUTTONDOWN:
+                x, y = pygame.mouse.get_pos()
+                col = x // TILE_SIZE
+                row = y // TILE_SIZE
+                pos = (col, row)
+
+                if pos in WHITE_positions:
+                    WHITE_positions.remove(pos)
+                else:
+                    WHITE_positions.add(pos)
+            #This is the same but for a key and we will say which key does what in a moment
+            if event.type == pygame.KEYDOWN:
+                #When the space bar is pressed then the simulation goes from playing to paused or vice versa
+                if event.key == pygame.K_SPACE:
+                    playing = not playing
+                #When the c key is pressed then it will pause and clear the window
+                if event.key == pygame.K_c:
+                    YELLOW_positions = set()
+                    WHITE_positions = set()
+                    BLACK_positions = set()
+                    RED_positions = set()
+                    playing = False
+                    count = 0
+                #When the g key is pressed then a new simulation will be generated while the old ones get cleared
+                if event.key == pygame.K_g:
+                    YELLOW_positions.clear()
+                    WHITE_positions.clear()
+                    BLACK_positions.clear()
+                    RED_positions.clear()
+                    RED_positions = gen(random.randrange(4, 10) * GRID_WIDTH)
+                    BLACK_positions = gen(random.randrange(4, 10) * GRID_WIDTH)
+
+        #This sets the back ground color, in this case blue to represent water
+        screen.fill(BLUE)
+        #This draws the grid with the positons calculated
+        draw_grid(RED_positions, BLACK_positions, WHITE_positions, YELLOW_positions)
+        #This updates the window
+        pygame.display.update()
+
+    #This makes the game quite when we close the window
+    pygame.quit()
+#This starts the game when run
+if __name__ == "__main__":
+    main()
+"""
+And thats about it
+A little confusing at points but fun to experiment with
+Have fun!
+"""
