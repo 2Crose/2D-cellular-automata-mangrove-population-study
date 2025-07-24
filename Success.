@@ -1,0 +1,301 @@
+import pygame
+import random
+from collections import Counter
+# Define colored neighbors
+# Define colored positions
+# Define colored updates based on neighbors
+"""
+    for RED_position in positions:
+        col, row = RED_position
+        top_left = (col * TILE_SIZE, row * TILE_SIZE)
+        pygame.draw.rect(screen, RED, (*top_left, TILE_SIZE, TILE_SIZE))
+    for WHITE_position in positions:
+        col, row = WHITE_position
+        top_left = (col * TILE_SIZE, row * TILE_SIZE)
+        pygame.draw.rect(screen, WHITE, (*top_left, TILE_SIZE, TILE_SIZE))
+"""
+
+pygame.init()
+
+GREY = (128,128,128)
+BLACK = (0, 0, 0)
+WHITE = (255, 255, 255)
+RED = (255, 0, 0)
+BLUE = (0, 0, 225)
+YELLOW = (255, 255, 0)
+BROWN = (150, 75, 0)
+
+WIDTH, HEIGHT = 800, 800
+TILE_SIZE = 10
+GRID_WIDTH = WIDTH // TILE_SIZE
+GRID_HEIGHT = HEIGHT // TILE_SIZE
+FPS = 60
+
+screen = pygame.display.set_mode((WIDTH, HEIGHT))
+
+clock = pygame.time.Clock()
+
+def gen(num):
+    return set([(random.randrange(0, GRID_WIDTH), random.randrange(0, GRID_HEIGHT)) for _ in range(num)])
+
+def draw_grid(RED_positions, BLACK_positions, WHITE_positions, YELLOW_positions, BROWN_positions):
+    for BROWN_position in BROWN_positions:
+        col, row = BROWN_position
+        top_left = (col * TILE_SIZE, row * TILE_SIZE)
+        pygame.draw.rect(screen, BROWN, (*top_left, TILE_SIZE, TILE_SIZE))
+    for RED_position in RED_positions:
+        col, row = RED_position
+        top_left = (col * TILE_SIZE, row * TILE_SIZE)
+        pygame.draw.rect(screen, RED, (*top_left, TILE_SIZE, TILE_SIZE))
+    for BLACK_position in BLACK_positions:
+        col, row = BLACK_position
+        top_left = (col * TILE_SIZE, row * TILE_SIZE)
+        pygame.draw.rect(screen, BLACK, (*top_left, TILE_SIZE, TILE_SIZE))
+    for WHITE_position in WHITE_positions:
+        col, row = WHITE_position
+        top_left = (col * TILE_SIZE, row * TILE_SIZE)
+        pygame.draw.rect(screen, WHITE, (*top_left, TILE_SIZE, TILE_SIZE))
+    for YELLOW_position in YELLOW_positions:
+        col, row = YELLOW_position
+        top_left = (col * TILE_SIZE, row * TILE_SIZE)
+        pygame.draw.rect(screen, YELLOW, (*top_left, TILE_SIZE, TILE_SIZE))
+    for row in range(GRID_HEIGHT):
+        pygame.draw.line(screen, GREY, (0, row * TILE_SIZE), (WIDTH, row * TILE_SIZE))
+
+    for col in range(GRID_WIDTH):
+        pygame.draw.line(screen, GREY, (col * TILE_SIZE, 0), (col * TILE_SIZE, HEIGHT))
+
+def adjust_grid(RED_positions, BLACK_positions, WHITE_positions, YELLOW_positions, BROWN_positions):
+
+    all_YELLOW_neighbors = set()
+    new_YELLOW_positions = set()
+    new_YELLOW_positions_todiscard = set()
+    all_WHITE_neighbors = set()
+    new_WHITE_positions = set()
+    new_WHITE_positions_todiscard = set()
+    all_BLACK_neighbors = set()
+    new_BLACK_positions = set()
+    new_BLACK_positions_todiscard = set()
+    all_RED_neighbors = set()
+    new_RED_positions = set()
+    new_RED_positions_todiscard = set()
+    all_BROWN_neighbors = set()
+    new_BROWN_positions = set()
+    new_BROWN_positions_todiscard = set()
+
+    for BROWN_position in BROWN_positions:
+        new_BROWN_positions.add(BROWN_position)
+        
+    for RED_position in RED_positions:
+        RED_neighbors = get_neighbors(RED_position)
+
+        RED_neighbors = list(filter(lambda x: x in RED_positions, RED_neighbors))
+
+        if len(RED_neighbors) in [1, 2, 3]:
+            new_RED_positions.add(RED_position)
+        else:
+            new_BROWN_positions.add(RED_position)
+            
+    for RED_position in new_RED_positions:
+        RED_neighbors = get_neighbors(RED_position)
+        all_RED_neighbors.update(RED_neighbors)
+        
+    for RED_position in all_RED_neighbors:
+        RED_neighbors = get_neighbors(RED_position)
+        RED_neighbors = list(filter(lambda x: x in new_RED_positions, RED_neighbors))
+
+        if len(RED_neighbors) in [1, 2]:
+            new_RED_positions.add(RED_position)
+            
+    for RED_position in new_RED_positions:
+        if random.randint(1, 150) == 1:   
+            new_RED_positions_todiscard.add(RED_position)
+            
+    for RED_position in new_RED_positions_todiscard:
+        new_RED_positions.discard(RED_position)
+        
+    for RED_position in new_RED_positions_todiscard:
+        new_BROWN_positions.add(RED_position)    
+#-----           
+    for BLACK_position in BLACK_positions:
+        BLACK_neighbors = get_neighbors(BLACK_position)
+        all_BLACK_neighbors.update(BLACK_neighbors)
+        
+        BLACK_neighbors = list(filter(lambda x: x in BLACK_positions, BLACK_neighbors))
+        if len(BLACK_neighbors) in [2,3]:
+            new_BLACK_positions.add(BLACK_position)
+        else:
+            new_BROWN_positions.add(BLACK_position)
+
+    for RED_position in new_RED_positions:
+        RED_neighbors = get_neighbors(RED_position)
+        RED_neighbors = list(filter(lambda x: x in new_BLACK_positions, RED_neighbors))
+
+        if len(RED_neighbors) in [1, 2, 3]:
+            new_BLACK_positions.add(RED_position)
+            new_RED_positions_todiscard.add(RED_position)
+            
+    for RED_position in new_RED_positions_todiscard:
+        new_RED_positions.discard(RED_position)
+
+    for BLACK_position in new_BLACK_positions:
+        if random.randint(1, 100) == 1:   
+            new_BLACK_positions_todiscard.add(BLACK_position)        
+         
+    for BLACK_position in new_BLACK_positions_todiscard:
+        new_BLACK_positions.discard(BLACK_position)
+
+    for BLACK_position in new_BLACK_positions_todiscard:
+        new_BROWN_positions.add(BLACK_position)
+#----- 
+    for WHITE_position in WHITE_positions:
+        WHITE_neighbors = get_neighbors(WHITE_position)
+        all_WHITE_neighbors.update(WHITE_neighbors)
+
+        WHITE_neighbors = list(filter(lambda x: x in WHITE_positions, WHITE_neighbors))
+
+        if len(WHITE_neighbors) in [2,3]:
+            new_WHITE_positions.add(WHITE_position)
+        else:
+            new_BROWN_positions.add(WHITE_position)
+
+    for BLACK_position in new_BLACK_positions:
+        BLACK_neighbors = get_neighbors(BLACK_position)
+
+        BLACK_neighbors = list(filter(lambda x: x in new_WHITE_positions, BLACK_neighbors))
+
+        if len(BLACK_neighbors) in [1,2,3]:
+            new_WHITE_positions.add(BLACK_position)
+            new_BLACK_positions_todiscard.add(BLACK_position)
+
+    for BLACK_position in new_BLACK_positions_todiscard:
+        new_BLACK_positions.discard(BLACK_position)
+     
+    for WHITE_position in new_WHITE_positions:
+        if random.randint(1, 100) == 1:   
+            new_WHITE_positions_todiscard.add(WHITE_position)
+         
+    for WHITE_position in new_WHITE_positions_todiscard:
+        new_WHITE_positions.discard(WHITE_position)
+
+    for WHITE_position in new_WHITE_positions_todiscard:
+        new_BROWN_positions.add(WHITE_position)
+#-----             
+    for YELLOW_position in YELLOW_positions:
+        YELLOW_neighbors = get_neighbors(YELLOW_position)
+        all_YELLOW_neighbors.update(YELLOW_neighbors)
+
+        YELLOW_neighbors = list(filter(lambda x: x in YELLOW_positions, YELLOW_neighbors))
+
+        if len(YELLOW_neighbors) in [1,2]:
+            new_YELLOW_positions.add(YELLOW_position)
+        else:
+            new_BROWN_positions.add(YELLOW_position)
+
+    for WHITE_position in new_WHITE_positions:
+        WHITE_neighbors = get_neighbors(WHITE_position)
+        WHITE_neighbors = list(filter(lambda x: x in new_YELLOW_positions, WHITE_neighbors))
+        if len(WHITE_neighbors) in [1, 2, 3, 4]:
+            new_YELLOW_positions.add(WHITE_position)
+            new_WHITE_positions_todiscard.add(WHITE_position)
+
+    for WHITE_position in new_WHITE_positions_todiscard:
+        new_WHITE_positions.discard(WHITE_position)
+        
+    for YELLOW_position in new_YELLOW_positions:
+        if random.randint(1, 50) == 1:   
+            new_YELLOW_positions_todiscard.add(YELLOW_position)
+            
+    for YELLOW_position in new_YELLOW_positions_todiscard:
+        new_YELLOW_positions.discard(YELLOW_position)
+
+    for YELLOW_position in new_YELLOW_positions_todiscard:
+        new_BROWN_positions.add(YELLOW_position)
+        
+    return new_RED_positions, new_BLACK_positions, new_WHITE_positions, new_YELLOW_positions, new_BROWN_positions
+
+def get_neighbors(pos):
+    x, y = pos
+    neighbors = []
+    for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
+        nx, ny = x + dx, y + dy
+        if abs(dx) + abs(dy) != 1:
+          continue
+        if 0 <= nx < GRID_WIDTH and 0 <= ny < GRID_HEIGHT:
+            neighbors.append((nx, ny))
+    return neighbors
+
+def main():
+    running = True
+    playing = False
+    clock = pygame.time.Clock()
+    FPS = 60
+    count = 0
+    update_freq = 10
+    YELLOW_positions = set()
+    WHITE_positions = set()
+    BLACK_positions = set()
+    RED_positions = set()
+    BROWN_positions = set()
+    while running:
+        clock.tick(FPS)
+        if playing:
+            count += 1
+            
+        if count >= update_freq:
+            count = 0
+            RED_positions, BLACK_positions, WHITE_positions, YELLOW_positions, BROWN_positions = adjust_grid(RED_positions, BLACK_positions, WHITE_positions, YELLOW_positions, BROWN_positions)
+        if playing:
+            status = "Playing"
+        else:
+            status = "Paused"
+
+        caption = (f"{status}  RED = {len(RED_positions)}  BLACK = {len(BLACK_positions)}  WHITE = {len(WHITE_positions)}  YELLOW = {len(YELLOW_positions)}  BROWN = {len(BROWN_positions)}")
+
+        pygame.display.set_caption(caption)
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                running = False
+
+            if event.type == pygame.MOUSEBUTTONDOWN:
+                x, y = pygame.mouse.get_pos()
+                col = x // TILE_SIZE
+                row = y // TILE_SIZE
+                pos = (col, row)
+
+                if pos in WHITE_positions:
+                    WHITE_positions.remove(pos)
+                else:
+                    WHITE_positions.add(pos)
+
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_SPACE:
+                    playing = not playing
+
+                if event.key == pygame.K_c:
+                    positions = set()
+                    playing = False
+                    count = 0
+
+                if event.key == pygame.K_g:
+                    YELLOW_positions.clear()
+                    WHITE_positions.clear()
+                    BLACK_positions.clear()
+                    RED_positions.clear()
+                    BROWN_positions.clear()
+                    RED_positions = gen(random.randrange(4, 10) * GRID_WIDTH)
+                    BLACK_positions = gen(random.randrange(4, 10) * GRID_WIDTH)
+                    WHITE_positions = gen(random.randrange(4, 10) * GRID_WIDTH)
+                    YELLOW_positions = gen(random.randrange(4, 10) * GRID_WIDTH)
+
+
+        screen.fill(BLUE)
+        draw_grid(RED_positions, BLACK_positions, WHITE_positions, YELLOW_positions, BROWN_positions)
+        pygame.display.update()
+
+
+    pygame.quit()
+
+if __name__ == "__main__":
+    main()
